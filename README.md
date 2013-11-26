@@ -3,7 +3,7 @@ java-streaming-client-example
 
 This project is an example of how to use a Java Websocket client to connect to the Boundary Streaming API.
 
-# Running
+# Overview
 
 The project contains 2 tests. 
 
