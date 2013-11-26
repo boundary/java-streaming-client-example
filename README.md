@@ -3,8 +3,6 @@ java-streaming-client-example
 
 This project is an example of how to use a Java Websocket client to connect to the Boundary Streaming API.
 
-# Overview
-
 The project contains 2 tests. 
 
 * ConversationQueryTest - A test which connects to the Boundary Streaming API for a known Conversation and receives 10 streaming updates
