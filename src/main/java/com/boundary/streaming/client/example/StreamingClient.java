@@ -11,6 +11,8 @@ import org.cometd.client.BayeuxClient;
 import org.cometd.client.BayeuxClient.State;
 import org.cometd.websocket.client.WebSocketTransport;
 import org.eclipse.jetty.websocket.WebSocketClientFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.List;
@@ -23,11 +25,13 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public class StreamingClient {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(StreamingClient.class);
     private final String orgId;
     private final String apiKey;
     private final WebSocketTransport transport;
     private final BayeuxClient client;
     private final ConcurrentMap<Query, List<MessageListener>> queryRefToListeners = Maps.newConcurrentMap();
+    private final MessageListener subscriptionListener;
 
     public static final String SERVICE_QUERIES = "/service/queries";
 
@@ -39,16 +43,27 @@ public class StreamingClient {
      * @param wsFactory
      * @param scheduler
      */
-    public StreamingClient(String orgId, String apiKey, String url, WebSocketClientFactory wsFactory,
+    public StreamingClient(final String orgId, String apiKey, String url, WebSocketClientFactory wsFactory,
                            ScheduledExecutorService scheduler) {
         this.orgId = orgId;
         this.apiKey = apiKey;
 
         Map<String, Object> options = new HashMap<String, Object>();
-        options.put(WebSocketTransport.MAX_MESSAGE_SIZE_OPTION, 512 * 1024);
+        options.put(WebSocketTransport.MAX_MESSAGE_SIZE_OPTION, 5 * 1024 * 1024);
         transport = WebSocketTransport.create(options, wsFactory, scheduler);
         client = new BayeuxClient(url, scheduler, transport);
 
+        subscriptionListener = new MessageListener() {
+            @Override
+            public void onMessage(ClientSessionChannel channel, Message message) {
+                LOGGER.info("Streaming client connected for: {}", orgId);
+                for (Map.Entry<Query, List<MessageListener>> entry : queryRefToListeners.entrySet()) {
+                    for (MessageListener listener : entry.getValue()) {
+                        createSubscription(entry.getKey(), listener);
+                    }
+                }
+            }
+        };
         connect();
     }
 
@@ -73,28 +88,17 @@ public class StreamingClient {
      * Disconnects this @{link StreamingClient} from the API
      */
     public void disconnect() {
-        client.disconnect();
-        System.out.printf("Waiting for client to disconnect for: %s\n", orgId);
-        if (!client.waitFor(5000L, State.DISCONNECTED)) {
-            System.out.println("Client failed to disconnect cleanly");
+        client.getChannel(Channel.META_HANDSHAKE).unsubscribe(subscriptionListener);
+        LOGGER.info("Waiting for client to disconnect for: {}", orgId);
+        if (!client.disconnect(5000L)) {
+            LOGGER.error("Client failed to disconnect cleanly");
         }
         transport.abort();
-        System.out.printf("Disconnected streaming client for: %s\n", orgId);
+        LOGGER.info("Disconnected streaming client for: {}", orgId);
     }
 
     private void connect() {
-        client.getChannel(Channel.META_HANDSHAKE).addListener(new MessageListener() {
-            @Override
-            public void onMessage(ClientSessionChannel channel, Message message) {
-                System.out.printf("Streaming client connected for: %s\n", orgId);
-                for (Map.Entry<Query, List<MessageListener>> entry : queryRefToListeners.entrySet()) {
-                    for (MessageListener listener : entry.getValue()) {
-                        createSubscription(entry.getKey(), listener);
-                    }
-                }
-            }
-        });
-
+        client.getChannel(Channel.META_HANDSHAKE).addListener(subscriptionListener);
         handshake(orgId, apiKey);
     }
 
@@ -130,12 +134,9 @@ public class StreamingClient {
             // Add a handler to allow subscription to filter_by_meters queries
             final ClientSessionChannel serviceQueryChannel = client.getChannel(SERVICE_QUERIES);
             serviceQueryChannel.addListener(new ClientSessionChannel.MessageListener() {
-
                 @Override
                 public void onMessage(ClientSessionChannel clientSessionChannel, Message message) {
-
                     Map<String, Object> data = message.getDataAsMap();
-
                     if (data == null) {
                         throw new RuntimeException("Error creating query: " + query.getQueryUrl());
                     }
@@ -146,16 +147,14 @@ public class StreamingClient {
                     serviceQueryChannel.removeListener(this);
                 }
             });
-
             channel.publish(((FilterByMetersQuery) query).getExtParams());
-
         } else {
             // This is for our ConversationQueryTest, all we need to do here is subscribe the listener to the channel
             // that is fetched from the query.getQueryUrl
             channel.subscribe(listener);
         }
 
-        System.out.printf("Subscription created for: %s: \n" + channelName);
+        LOGGER.info("Subscription created for: {}", channelName);
     }
 
 }

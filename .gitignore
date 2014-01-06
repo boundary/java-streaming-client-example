@@ -1,2 +1,4 @@
 *.arcconfig
-*.idea
+*.idea/
+*.iml
+target/

@@ -14,15 +14,13 @@ import java.util.UUID;
  */
 public class FilterByMetersQuery implements Query {
 
-    private final Map<String, Object> extParams = Maps.newConcurrentMap();
-    private final Map<String, Object> extOuter = Maps.newConcurrentMap();
-    private final String id = UUID.randomUUID().toString();
+    private final Map<String, Object> extOuter = Maps.newHashMap();
 
     public static final String FILTER_BY_METERS_URL = StreamingClient.SERVICE_QUERIES + "/filter_by_meters";
 
     public FilterByMetersQuery(Type type, Resolution resolution, List<String> observationDomainIds) {
-
-        extParams.put("id", id);
+        Map<String, Object> extParams = Maps.newHashMap();
+        extParams.put("id", UUID.randomUUID().toString());
         extParams.put("query", "volume_" + resolution.getResolution() + "_meter_" + type.getQueryParameter());
 
         // Provide a list of ObservationDomainIDs for this query.

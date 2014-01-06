@@ -1,5 +1,7 @@
 package com.boundary.streaming.client.example;
 
+import com.google.common.base.Preconditions;
+
 /**
  * A @{link Query} which uses a known Conversation ID, @{link Type} and @{link Resolution} to connect
  * to the Boundary Streaming API.
@@ -11,10 +13,10 @@ public class ConversationQuery implements Query {
     private final Resolution resolution;
 
     public ConversationQuery(String conversationId, String organizationId, Type type, Resolution resolution) {
-        this.conversationId = conversationId;
-        this.organizationId = organizationId;
-        this.type = type;
-        this.resolution = resolution;
+        this.conversationId = Preconditions.checkNotNull(conversationId);
+        this.organizationId = Preconditions.checkNotNull(organizationId);
+        this.type = Preconditions.checkNotNull(type);
+        this.resolution = Preconditions.checkNotNull(resolution);
     }
 
     @Override

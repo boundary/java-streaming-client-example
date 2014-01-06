@@ -1,16 +1,13 @@
 package com.boundary.streaming.client.example;
 
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import org.cometd.bayeux.Message;
 import org.cometd.bayeux.client.ClientSessionChannel;
-import org.eclipse.jetty.util.thread.ExecutorThreadPool;
-import org.eclipse.jetty.websocket.WebSocketClientFactory;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static junit.framework.Assert.assertTrue;
@@ -20,52 +17,32 @@ import static junit.framework.Assert.assertTrue;
  */
 public class FilterByMetersQueryTest extends AbstractStreamingTest {
 
-    private final String organizationId = ""; // REPLACE WITH YOUR ORGANIZATION ID
-    private final String apiKey = ""; // REPLACE WITH YOUR API KEY
-
-    private final ExecutorThreadPool wsThreadPool = new ExecutorThreadPool(numberOfProcessors - 1,
-            numberOfProcessors - 1,
-            Long.MAX_VALUE,
-            TimeUnit.SECONDS);
-
-    private final WebSocketClientFactory wsFactory = new WebSocketClientFactory(wsThreadPool);
-    private final ScheduledExecutorService scheduledThreadPoolExecutor =
-            new ScheduledThreadPoolExecutor(numberOfProcessors - 1);
-
-    private final CountDownLatch countDownLatch = new CountDownLatch(10);
-
-    // YOU WILL NEED TO REPLACE THIS LIST WITH A LIST OF OBSERVATION DOMAIN IDS THAT CORRESPOND TO THE METERED
-    // SERVERS YOU WISH TO AGGREGATE FLOW DATA FOR.
-    List<String> obsDomainIds = Arrays.asList(new String[]{"1", "2", "3", "4", "5"});
+    public static final String BOUNDARY_CLIENT_OBS_DOMAIN_IDS = "boundary.client.obsDomainIds";
 
     @Test
     public void testFilterByMeterQuery() throws Exception {
-        FilterByMetersQuery defaultQuery = new FilterByMetersQuery(
-                Query.Type.portProtocol,
-                Query.Resolution.second,
-                obsDomainIds);
-
-        StreamingClient streamingClient = new StreamingClient(organizationId,
-                apiKey,
-                URL,
-                wsFactory,
-                scheduledThreadPoolExecutor);
-
-
-        streamingClient.subscribe(defaultQuery, new ClientSessionChannel.MessageListener() {
-            Object[] schema = null;
-
+        String obsDomainIdsProp = getRequiredProperty(BOUNDARY_CLIENT_OBS_DOMAIN_IDS);
+        List<String> obsDomainIds = Lists.newArrayList();
+        for (String obsDomainId : Splitter.on(',').trimResults().split(obsDomainIdsProp)) {
+            obsDomainIds.add(Integer.valueOf(obsDomainId).toString()); // Coerce to integer
+        }
+        if (obsDomainIds.isEmpty()) {
+            throw new IllegalStateException(
+                    String.format("No observation domain ids found in '%s'", BOUNDARY_CLIENT_OBS_DOMAIN_IDS));
+        }
+        FilterByMetersQuery defaultQuery = new FilterByMetersQuery(Type.portProtocol, Resolution.second, obsDomainIds);
+        final CountDownLatch countDownLatch = new CountDownLatch(10);
+        streamingClient.subscribe(defaultQuery, new SchemaMessageListener() {
             @Override
             public void onMessage(ClientSessionChannel clientSessionChannel, Message message) {
+                super.onMessage(clientSessionChannel, message);
                 handleMessage(message, schema);
                 countDownLatch.countDown();
             }
         });
 
         countDownLatch.await(30, TimeUnit.SECONDS);
-        assertTrue(countDownLatch.getCount() == 0L);
-        streamingClient.disconnect();
+        assertTrue("Didn't receive 10 messages for meters: " + obsDomainIds, countDownLatch.getCount() == 0L);
     }
-
 
 }

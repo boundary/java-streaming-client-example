@@ -2,13 +2,10 @@ package com.boundary.streaming.client.example;
 
 import org.cometd.bayeux.Message;
 import org.cometd.bayeux.client.ClientSessionChannel;
-import org.eclipse.jetty.util.thread.ExecutorThreadPool;
-import org.eclipse.jetty.websocket.WebSocketClientFactory;
 import org.junit.Test;
 
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static junit.framework.Assert.assertTrue;
@@ -18,50 +15,26 @@ import static junit.framework.Assert.assertTrue;
  */
 public class ConversationQueryTest extends AbstractStreamingTest {
 
-    private final String conversationId = ""; // REPLACE WITH A CONVERSATION ID
-    private final String organizationId = ""; // REPLACE WITH YOUR ORGANIZATION ID
-    private final String apiKey = ""; // REPLACE WITH YOUR API KEY
-
-    private final ExecutorThreadPool wsThreadPool = new ExecutorThreadPool(numberOfProcessors - 1,
-            numberOfProcessors - 1,
-            Long.MAX_VALUE,
-            TimeUnit.SECONDS);
-
-    private final WebSocketClientFactory wsFactory = new WebSocketClientFactory(wsThreadPool);
-    private final ScheduledExecutorService scheduledThreadPoolExecutor =
-            new ScheduledThreadPoolExecutor(numberOfProcessors - 1);
-
-    private final CountDownLatch countDownLatch = new CountDownLatch(10);
+    public static final String BOUNDARY_CLIENT_CONVERSATION_ID = "boundary.client.conversationId";
 
     @Test
     public void testConversationQuery() throws Exception {
-
+        String conversationId = getRequiredProperty(BOUNDARY_CLIENT_CONVERSATION_ID);
         ConversationQuery conversationQuery = new ConversationQuery(conversationId,
                 organizationId,
-                Query.Type.total,
-                Query.Resolution.second);
-
-
-        StreamingClient streamingClient = new StreamingClient(organizationId,
-                apiKey,
-                URL,
-                wsFactory,
-                scheduledThreadPoolExecutor);
-
-
-        streamingClient.subscribe(conversationQuery, new ClientSessionChannel.MessageListener() {
-
-            Object[] schema = null;
-
+                Type.total,
+                Resolution.second);
+        final CountDownLatch countDownLatch = new CountDownLatch(10);
+        streamingClient.subscribe(conversationQuery, new SchemaMessageListener() {
             @Override
             public void onMessage(ClientSessionChannel clientSessionChannel, Message message) {
+                super.onMessage(clientSessionChannel, message);
                 handleMessage(message, schema);
                 countDownLatch.countDown();
             }
         });
-
         countDownLatch.await(20, TimeUnit.SECONDS);
-        assertTrue(countDownLatch.getCount() == 0L);
-        streamingClient.disconnect();
+        assertTrue("Didn't received 10 messages for conversation: " + conversationId, countDownLatch.getCount() == 0L);
     }
+
 }
