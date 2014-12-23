@@ -3,8 +3,6 @@ package com.boundary.streaming.client.example;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import org.cometd.bayeux.Message;
-import org.eclipse.jetty.util.thread.ExecutorThreadPool;
-import org.eclipse.jetty.websocket.WebSocketClientFactory;
 import org.junit.After;
 import org.junit.Before;
 import org.slf4j.Logger;
@@ -30,25 +28,17 @@ public abstract class AbstractStreamingTest {
     protected String apiKey;
     protected final int numberOfProcessors = Runtime.getRuntime().availableProcessors();
 
-    private ExecutorThreadPool wsThreadPool;
-    private WebSocketClientFactory wsFactory;
     private ScheduledExecutorService scheduledThreadPoolExecutor;
     protected StreamingClient streamingClient;
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
         this.organizationId = getRequiredProperty(BOUNDARY_CLIENT_ORGANIZATION_ID);
         this.apiKey = getRequiredProperty(BOUNDARY_CLIENT_API_KEY);
-        this.wsThreadPool = new ExecutorThreadPool(numberOfProcessors,
-                numberOfProcessors,
-                Long.MAX_VALUE,
-                TimeUnit.SECONDS);
-        this.wsFactory = new WebSocketClientFactory(wsThreadPool);
         this.scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(numberOfProcessors);
         this.streamingClient = new StreamingClient(organizationId,
                 apiKey,
                 URL,
-                wsFactory,
                 scheduledThreadPoolExecutor);
     }
 
@@ -60,13 +50,6 @@ public abstract class AbstractStreamingTest {
         if (this.scheduledThreadPoolExecutor != null) {
             this.scheduledThreadPoolExecutor.shutdown();
             this.scheduledThreadPoolExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
-        }
-        if (this.wsFactory != null) {
-            this.wsFactory.stop();
-        }
-        if (this.wsThreadPool != null) {
-            this.wsThreadPool.stop();
-            this.wsThreadPool.join();
         }
     }
 

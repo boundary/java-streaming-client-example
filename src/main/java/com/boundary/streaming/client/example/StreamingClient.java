@@ -8,9 +8,10 @@ import org.cometd.bayeux.Message;
 import org.cometd.bayeux.client.ClientSessionChannel;
 import org.cometd.bayeux.client.ClientSessionChannel.MessageListener;
 import org.cometd.client.BayeuxClient;
-import org.cometd.client.BayeuxClient.State;
-import org.cometd.websocket.client.WebSocketTransport;
-import org.eclipse.jetty.websocket.WebSocketClientFactory;
+import org.cometd.websocket.client.JettyWebSocketTransport;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +29,7 @@ public class StreamingClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(StreamingClient.class);
     private final String orgId;
     private final String apiKey;
-    private final WebSocketTransport transport;
+    private final JettyWebSocketTransport transport;
     private final BayeuxClient client;
     private final ConcurrentMap<Query, List<MessageListener>> queryRefToListeners = Maps.newConcurrentMap();
     private final MessageListener subscriptionListener;
@@ -40,17 +41,23 @@ public class StreamingClient {
      * @param orgId - Organization ID
      * @param apiKey - API Key
      * @param url - URL of the Streaming API
-     * @param wsFactory
      * @param scheduler
      */
-    public StreamingClient(final String orgId, String apiKey, String url, WebSocketClientFactory wsFactory,
-                           ScheduledExecutorService scheduler) {
+    public StreamingClient(final String orgId, String apiKey, String url,
+                           ScheduledExecutorService scheduler) throws Exception {
         this.orgId = orgId;
         this.apiKey = apiKey;
 
+        QueuedThreadPool wsThreadPool = new QueuedThreadPool();
+        wsThreadPool.setName(wsThreadPool.getName() + "-client");
+        wsThreadPool.start();
+        SslContextFactory sslCtxFact = new SslContextFactory();
+        WebSocketClient wsClient = new WebSocketClient(sslCtxFact, wsThreadPool);
+        wsClient.start();
+
         Map<String, Object> options = new HashMap<String, Object>();
-        options.put(WebSocketTransport.MAX_MESSAGE_SIZE_OPTION, 5 * 1024 * 1024);
-        transport = WebSocketTransport.create(options, wsFactory, scheduler);
+        options.put(JettyWebSocketTransport.MAX_MESSAGE_SIZE_OPTION, 5 * 1024 * 1024);
+        transport = new JettyWebSocketTransport(url, options, null, wsClient);
         client = new BayeuxClient(url, scheduler, transport);
 
         subscriptionListener = new MessageListener() {
